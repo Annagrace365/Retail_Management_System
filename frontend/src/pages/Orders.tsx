@@ -1,323 +1,509 @@
-import React, { useState, useEffect } from 'react'
-import api from '../services/api'
-import LoadingSpinner from '../components/LoadingSpinner'
-import { Plus, Eye } from 'lucide-react'
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Eye, ShoppingCart, User, Package, DollarSign, Calendar } from 'lucide-react';
+import { ordersAPI, customersAPI, productsAPI } from '../services/api';
+import { Order, Customer, Product } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import Modal from '../components/Modal';
+import FormInput from '../components/FormInput';
 
-interface Order {
-  order_id: number
-  customer: number
-  customer_name: string
-  order_date: string
-  amount: number
-  items: any[]
-}
-
-interface Customer {
-  customer_id: number
-  name: string
-}
-
-interface Product {
-  product_id: number
-  name: string
-  price: number
-  stock: number
-}
-
-function Orders() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+const Orders: React.FC = () => {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [formData, setFormData] = useState({
     customer: '',
-    items: [{ product: '', quantity: 1 }]
-  })
+    items: [{ product_id: '', quantity: 1 }],
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    loadData();
+  }, []);
 
-  const fetchData = async () => {
+  const loadData = async () => {
     try {
+      setLoading(true);
       const [ordersRes, customersRes, productsRes] = await Promise.all([
-        api.get('/orders/'),
-        api.get('/customers/'),
-        api.get('/products/')
-      ])
-      
-      setOrders(ordersRes.data.results || ordersRes.data)
-      setCustomers(customersRes.data.results || customersRes.data)
-      setProducts(productsRes.data.results || productsRes.data)
+        ordersAPI.getAll(),
+        customersAPI.getAll(),
+        productsAPI.getAll(),
+      ]);
+
+      const ordersData = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data.results;
+      const customersData = Array.isArray(customersRes.data) ? customersRes.data : customersRes.data.results;
+      const productsData = Array.isArray(productsRes.data) ? productsRes.data : productsRes.data.results;
+
+      setOrders(ordersData);
+      setCustomers(customersData);
+      setProducts(productsData);
     } catch (error) {
-      console.error('Failed to fetch data:', error)
+      console.error('Error loading data:', error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const filteredOrders = orders.filter(order =>
+    order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.order_id.toString().includes(searchTerm)
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: '',
+      }));
+    }
+  };
+
+  const addItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, { product_id: '', quantity: 1 }],
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    if (formData.items.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
+  const updateItem = (index: number, field: string, value: string | number) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
+      ),
+    }));
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.customer) {
+      newErrors.customer = 'Please select a customer';
+    }
+
+    if (formData.items.length === 0) {
+      newErrors.items = 'Please add at least one item';
+    }
+
+    formData.items.forEach((item, index) => {
+      if (!item.product_id) {
+        newErrors[`item_${index}_product`] = 'Please select a product';
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        newErrors[`item_${index}_quantity`] = 'Please enter a valid quantity';
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     
+    if (!validateForm()) {
+      return;
+    }
+
     try {
-      const totalAmount = formData.items.reduce((sum, item) => {
-        const product = products.find(p => p.product_id === parseInt(item.product))
-        return sum + (product ? product.price * item.quantity : 0)
-      }, 0)
-
-      const orderData = {
-        customer: parseInt(formData.customer),
-        amount: totalAmount,
+      setSubmitting(true);
+      
+      const submitData = {
+        customer: Number(formData.customer),
         items: formData.items.map(item => ({
-          product: parseInt(item.product),
-          quantity: item.quantity
-        }))
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity),
+        })),
+      };
+      
+      await ordersAPI.create(submitData);
+      await loadData();
+      closeModal();
+    } catch (error: any) {
+      console.error('Error creating order:', error);
+      if (error.response?.data) {
+        const apiErrors = error.response.data;
+        const newErrors: Record<string, string> = {};
+        
+        Object.keys(apiErrors).forEach(key => {
+          if (Array.isArray(apiErrors[key])) {
+            newErrors[key] = apiErrors[key][0];
+          } else {
+            newErrors[key] = apiErrors[key];
+          }
+        });
+        
+        setErrors(newErrors);
       }
-
-      await api.post('/orders/', orderData)
-      fetchData()
-      resetForm()
-    } catch (error) {
-      console.error('Failed to create order:', error)
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
-  const handleAddItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { product: '', quantity: 1 }]
-    })
-  }
+  const handleViewOrder = (order: Order) => {
+    setSelectedOrder(order);
+    setShowOrderModal(true);
+  };
 
-  const handleRemoveItem = (index: number) => {
-    if (formData.items.length > 1) {
-      const newItems = formData.items.filter((_, i) => i !== index)
-      setFormData({ ...formData, items: newItems })
-    }
-  }
-
-  const handleItemChange = (index: number, field: string, value: string | number) => {
-    const newItems = [...formData.items]
-    newItems[index] = { ...newItems[index], [field]: value }
-    setFormData({ ...formData, items: newItems })
-  }
-
-  const resetForm = () => {
+  const openModal = () => {
     setFormData({
       customer: '',
-      items: [{ product: '', quantity: 1 }]
-    })
-    setShowModal(false)
-  }
+      items: [{ product_id: '', quantity: 1 }],
+    });
+    setErrors({});
+    setShowModal(true);
+  };
 
-  const viewOrderDetails = (order: Order) => {
-    setSelectedOrder(order)
-    setShowDetailsModal(true)
-  }
+  const closeModal = () => {
+    setShowModal(false);
+    setFormData({
+      customer: '',
+      items: [{ product_id: '', quantity: 1 }],
+    });
+    setErrors({});
+  };
+
+  const closeOrderModal = () => {
+    setShowOrderModal(false);
+    setSelectedOrder(null);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
+  };
 
   if (loading) {
-    return <LoadingSpinner size="lg" />
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+          <p className="text-gray-600">Manage customer orders</p>
+        </div>
         <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary flex items-center"
+          onClick={openModal}
+          className="btn btn-primary"
         >
-          <Plus className="h-5 w-5 mr-2" />
+          <Plus className="w-4 h-4 mr-2" />
           Create Order
         </button>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Search orders by customer name or order ID..."
+          value={searchTerm}
+          onChange={handleSearch}
+          className="form-input pl-10"
+        />
+      </div>
+
+      {/* Orders Table */}
       <div className="card">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="table">
+            <thead>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Order ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Items</th>
+                <th>Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {orders.map((order) => (
-                <tr key={order.order_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{order.order_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.customer_name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(order.order_date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${parseFloat(order.amount.toString()).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => viewOrderDetails(order)}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+            <tbody>
+              {filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-gray-500">
+                    {searchTerm ? 'No orders found matching your search.' : 'No orders found.'}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredOrders.map((order) => (
+                  <tr key={order.order_id}>
+                    <td>
+                      <div className="flex items-center">
+                        <ShoppingCart className="h-5 w-5 text-primary-600 mr-2" />
+                        <span className="font-medium">#{order.order_id}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {order.customer_name}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-900">
+                          {new Date(order.order_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center">
+                        <DollarSign className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="font-medium text-gray-900">
+                          {formatCurrency(order.amount)}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="text-sm text-gray-900">
+                        {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => handleViewOrder(order)}
+                        className="text-primary-600 hover:text-primary-900"
+                        title="View order details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       {/* Create Order Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Create Order</h3>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Customer
-                </label>
-                <select
-                  required
-                  className="input-field"
-                  value={formData.customer}
-                  onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                >
-                  <option value="">Select Customer</option>
-                  {customers.map(customer => (
-                    <option key={customer.customer_id} value={customer.customer_id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      <Modal
+        isOpen={showModal}
+        onClose={closeModal}
+        title="Create Order"
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="form-label">
+              Customer
+              <span className="text-red-500 ml-1">*</span>
+            </label>
+            <select
+              name="customer"
+              value={formData.customer}
+              onChange={handleInputChange}
+              className={`form-input ${errors.customer ? 'border-red-500 focus:ring-red-500' : ''}`}
+              required
+            >
+              <option value="">Select a customer</option>
+              {customers.map(customer => (
+                <option key={customer.customer_id} value={customer.customer_id}>
+                  {customer.name} - {customer.phone}
+                </option>
+              ))}
+            </select>
+            {errors.customer && (
+              <div className="text-red-600 text-sm">{errors.customer}</div>
+            )}
+          </div>
 
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Items
-                </label>
-                {formData.items.map((item, index) => (
-                  <div key={index} className="flex space-x-2 mb-2">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-lg font-medium text-gray-900">Order Items</h4>
+              <button
+                type="button"
+                onClick={addItem}
+                className="btn btn-secondary"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Item
+              </button>
+            </div>
+
+            {formData.items.map((item, index) => (
+              <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="form-label">
+                      Product
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
                     <select
+                      value={item.product_id}
+                      onChange={(e) => updateItem(index, 'product_id', e.target.value)}
+                      className={`form-input ${errors[`item_${index}_product`] ? 'border-red-500 focus:ring-red-500' : ''}`}
                       required
-                      className="input-field flex-1"
-                      value={item.product}
-                      onChange={(e) => handleItemChange(index, 'product', e.target.value)}
                     >
-                      <option value="">Select Product</option>
+                      <option value="">Select a product</option>
                       {products.map(product => (
                         <option key={product.product_id} value={product.product_id}>
-                          {product.name} - ${product.price}
+                          {product.name} - {formatCurrency(product.price)} (Stock: {product.stock})
                         </option>
                       ))}
                     </select>
+                    {errors[`item_${index}_product`] && (
+                      <div className="text-red-600 text-sm">{errors[`item_${index}_product`]}</div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="form-label">
+                      Quantity
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
                     <input
                       type="number"
                       min="1"
-                      required
-                      className="input-field w-20"
-                      placeholder="Qty"
                       value={item.quantity}
-                      onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value))}
+                      onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
+                      className={`form-input ${errors[`item_${index}_quantity`] ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      required
                     />
-                    {formData.items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(index)}
-                        className="btn btn-error"
-                      >
-                        Remove
-                      </button>
+                    {errors[`item_${index}_quantity`] && (
+                      <div className="text-red-600 text-sm">{errors[`item_${index}_quantity`]}</div>
                     )}
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="btn btn-secondary mt-2"
-                >
-                  Add Item
-                </button>
-              </div>
+                </div>
 
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Create Order
-                </button>
+                {formData.items.length > 1 && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => removeItem(index)}
+                      className="btn btn-danger"
+                    >
+                      Remove Item
+                    </button>
+                  </div>
+                )}
               </div>
-            </form>
+            ))}
+
+            {errors.items && (
+              <div className="text-red-600 text-sm">{errors.items}</div>
+            )}
           </div>
-        </div>
-      )}
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="btn btn-secondary"
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                'Create Order'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Order Details Modal */}
-      {showDetailsModal && selectedOrder && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Order #{selectedOrder.order_id}
-            </h3>
-            <div className="space-y-3">
+      <Modal
+        isOpen={showOrderModal}
+        onClose={closeOrderModal}
+        title={`Order #${selectedOrder?.order_id}`}
+        size="lg"
+      >
+        {selectedOrder && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <span className="font-medium">Customer:</span> {selectedOrder.customer_name}
+                <h4 className="font-medium text-gray-900 mb-2">Customer Information</h4>
+                <p className="text-sm text-gray-600">{selectedOrder.customer_name}</p>
               </div>
               <div>
-                <span className="font-medium">Date:</span> {new Date(selectedOrder.order_date).toLocaleDateString()}
-              </div>
-              <div>
-                <span className="font-medium">Items:</span>
-                <ul className="mt-1">
-                  {selectedOrder.items.map((item, index) => (
-                    <li key={index} className="text-sm text-gray-600">
-                      {item.product_name} x {item.quantity} - ${(item.product_price * item.quantity).toFixed(2)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="border-t pt-3">
-                <span className="font-medium">Total:</span> ${parseFloat(selectedOrder.amount.toString()).toFixed(2)}
+                <h4 className="font-medium text-gray-900 mb-2">Order Date</h4>
+                <p className="text-sm text-gray-600">
+                  {new Date(selectedOrder.order_date).toLocaleString()}
+                </p>
               </div>
             </div>
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="btn btn-primary"
-              >
-                Close
-              </button>
+
+            <div>
+              <h4 className="font-medium text-gray-900 mb-4">Order Items</h4>
+              <div className="space-y-3">
+                {selectedOrder.order_items?.map((item, index) => (
+                  <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center">
+                      <Package className="h-5 w-5 text-gray-400 mr-3" />
+                      <div>
+                        <p className="font-medium text-gray-900">{item.product_name}</p>
+                        <p className="text-sm text-gray-600">
+                          {formatCurrency(item.product_price)} × {item.quantity}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-gray-900">
+                        {formatCurrency(item.total_price)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-medium text-gray-900">Total Amount:</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {formatCurrency(selectedOrder.amount)}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
-  )
-}
+  );
+};
 
-export default Orders
+export default Orders;
