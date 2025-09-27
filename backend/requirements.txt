@@ -1,10 +1,8 @@
-Django==4.2.7
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.0
-django-cors-headers==4.3.1
-# mysqlclient==2.2.0  # Commented out - use PyMySQL instead for Windows
-PyMySQL==1.1.0
-python-decouple==3.8
-drf-yasg==1.21.7
-# Pillow  # Commented out due to Python 3.13 compatibility issues
-django-extensions==3.2.3
+Django
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+PyMySQL
+python-decouple
+drf-yasg
+django-extensions
