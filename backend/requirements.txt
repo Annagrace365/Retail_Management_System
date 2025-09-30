@@ -1,0 +1,32 @@
+# Retail Management System - Backend Dependencies
+# Core Django Framework
+Django>=4.2.0,<5.0.0
+djangorestframework>=3.14.0,<4.0.0
+
+# Authentication & JWT
+djangorestframework-simplejwt[crypto]>=5.3.0,<6.0.0
+
+# CORS and API Documentation
+django-cors-headers>=4.3.0,<5.0.0
+drf-yasg>=1.21.0,<2.0.0
+
+# Database - MySQL/MariaDB
+PyMySQL>=1.1.0,<2.0.0
+
+# Configuration Management
+python-decouple>=3.8,<4.0.0
+
+# Development Tools
+django-extensions>=3.2.0,<4.0.0
+django-filter>=23.0.0
+
+# Image Processing (Optional - can be commented out if causing issues)
+# Pillow>=10.0.0
+
+# Production Server (for deployment)
+gunicorn>=21.0.0
+whitenoise>=6.5.0
+
+# Security & Performance
+django-ratelimit>=4.1.0
+django-cors-headers>=4.3.0
