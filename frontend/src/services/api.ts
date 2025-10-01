@@ -1,175 +1,93 @@
+// src/services/api.ts
 import axios, { AxiosResponse } from 'axios';
-import {
-  LoginCredentials,
-  AuthResponse,
-  Customer,
-  Product,
-  Supplier,
-  Order,
-  Payment,
-  ProductSupplier,
-  DashboardStats,
-  ApiResponse,
-  CreateOrderData,
-  CreatePaymentData,
-  CreateProductSupplierData,
+import { 
+  DashboardStats, Customer, Product, Supplier, Order, Payment, ProductSupplier, LoginCredentials, AuthResponse, User 
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE = 'http://127.0.0.1:8000/api';
 
-// Create axios instance
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: API_BASE,
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Token ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-// Auth API
+// -------------------- AUTH --------------------
 export const authAPI = {
   login: (credentials: LoginCredentials): Promise<AxiosResponse<AuthResponse>> =>
-    api.post('/auth/login/', credentials),
+    api.post('/token/', credentials),
   
-  logout: (): Promise<AxiosResponse<void>> =>
-    api.post('/auth/logout/'),
+  refresh: (refreshToken: string): Promise<AxiosResponse<{ access: string }>> =>
+    api.post('/token/refresh/', { refresh: refreshToken }),
+  
+  getCurrentUser: (): Promise<AxiosResponse<User>> =>
+    api.get('/users/me/'),
 };
 
-// Dashboard API
+// -------------------- DASHBOARD --------------------
 export const dashboardAPI = {
-  getStats: (): Promise<AxiosResponse<DashboardStats>> =>
-    api.get('/dashboard/stats/'),
+  getStats: (): Promise<AxiosResponse<DashboardStats>> => api.get('/dashboard/'),
 };
 
-// Customers API
+// -------------------- CUSTOMERS --------------------
 export const customersAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<Customer> | Customer[]>> =>
-    api.get('/customers/'),
-  
-  getById: (id: number): Promise<AxiosResponse<Customer>> =>
-    api.get(`/customers/${id}/`),
-  
-  create: (data: Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>): Promise<AxiosResponse<Customer>> =>
-    api.post('/customers/', data),
-  
-  update: (id: number, data: Partial<Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>>): Promise<AxiosResponse<Customer>> =>
-    api.put(`/customers/${id}/`, data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/customers/${id}/`),
+  getAll: (): Promise<AxiosResponse<Customer[]>> => api.get('/customers/'),
+  getById: (id: number) => api.get(`/customers/${id}/`),
+  create: (data: Partial<Customer>) => api.post('/customers/', data),
+  update: (id: number, data: Partial<Customer>) => api.put(`/customers/${id}/`, data),
+  delete: (id: number) => api.delete(`/customers/${id}/`),
 };
 
-// Products API
+// -------------------- PRODUCTS --------------------
 export const productsAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<Product> | Product[]>> =>
-    api.get('/products/'),
-  
-  getById: (id: number): Promise<AxiosResponse<Product>> =>
-    api.get(`/products/${id}/`),
-  
-  create: (data: Omit<Product, 'product_id' | 'created_at' | 'updated_at' | 'suppliers'>): Promise<AxiosResponse<Product>> =>
-    api.post('/products/', data),
-  
-  update: (id: number, data: Partial<Omit<Product, 'product_id' | 'created_at' | 'updated_at' | 'suppliers'>>): Promise<AxiosResponse<Product>> =>
-    api.put(`/products/${id}/`, data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/products/${id}/`),
-  
-  getLowStock: (): Promise<AxiosResponse<ApiResponse<Product> | Product[]>> =>
-    api.get('/products/?low_stock=true'),
+  getAll: (): Promise<AxiosResponse<Product[]>> => api.get('/products/'),
+  getById: (id: number) => api.get(`/products/${id}/`),
+  create: (data: Partial<Product>) => api.post('/products/', data),
+  update: (id: number, data: Partial<Product>) => api.put(`/products/${id}/`, data),
+  delete: (id: number) => api.delete(`/products/${id}/`),
 };
 
-// Suppliers API
+// -------------------- SUPPLIERS --------------------
 export const suppliersAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<Supplier> | Supplier[]>> =>
-    api.get('/suppliers/'),
-  
-  getById: (id: number): Promise<AxiosResponse<Supplier>> =>
-    api.get(`/suppliers/${id}/`),
-  
-  create: (data: Omit<Supplier, 'supplier_id' | 'created_at' | 'updated_at'>): Promise<AxiosResponse<Supplier>> =>
-    api.post('/suppliers/', data),
-  
-  update: (id: number, data: Partial<Omit<Supplier, 'supplier_id' | 'created_at' | 'updated_at'>>): Promise<AxiosResponse<Supplier>> =>
-    api.put(`/suppliers/${id}/`, data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/suppliers/${id}/`),
+  getAll: (): Promise<AxiosResponse<Supplier[]>> => api.get('/suppliers/'),
+  getById: (id: number) => api.get(`/suppliers/${id}/`),
+  create: (data: Partial<Supplier>) => api.post('/suppliers/', data),
+  update: (id: number, data: Partial<Supplier>) => api.put(`/suppliers/${id}/`, data),
+  delete: (id: number) => api.delete(`/suppliers/${id}/`),
 };
 
-// Orders API
+// -------------------- ORDERS --------------------
 export const ordersAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<Order> | Order[]>> =>
-    api.get('/orders/'),
-  
-  getById: (id: number): Promise<AxiosResponse<Order>> =>
-    api.get(`/orders/${id}/`),
-  
-  create: (data: CreateOrderData): Promise<AxiosResponse<Order>> =>
-    api.post('/orders/', data),
-  
-  update: (id: number, data: Partial<CreateOrderData>): Promise<AxiosResponse<Order>> =>
-    api.put(`/orders/${id}/`, data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/orders/${id}/`),
+  getAll: (): Promise<AxiosResponse<Order[]>> => api.get('/orders/'),
+  getById: (id: number) => api.get(`/orders/${id}/`),
+  create: (data: any) => api.post('/orders/', data),
+  update: (id: number, data: any) => api.put(`/orders/${id}/`, data),
+  delete: (id: number) => api.delete(`/orders/${id}/`),
 };
 
-// Payments API
+// -------------------- PAYMENTS --------------------
 export const paymentsAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<Payment> | Payment[]>> =>
-    api.get('/payments/'),
-  
-  getById: (id: number): Promise<AxiosResponse<Payment>> =>
-    api.get(`/payments/${id}/`),
-  
-  create: (data: CreatePaymentData): Promise<AxiosResponse<Payment>> =>
-    api.post('/payments/', data),
-  
-  update: (id: number, data: Partial<CreatePaymentData>): Promise<AxiosResponse<Payment>> =>
-    api.put(`/payments/${id}/`, data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/payments/${id}/`),
+  getAll: (): Promise<AxiosResponse<Payment[]>> => api.get('/payments/'),
+  getById: (id: number) => api.get(`/payments/${id}/`),
+  create: (data: any) => api.post('/payments/', data),
+  update: (id: number, data: any) => api.put(`/payments/${id}/`, data),
+  delete: (id: number) => api.delete(`/payments/${id}/`),
 };
 
-// Product Suppliers API
+// -------------------- PRODUCT-SUPPLIER --------------------
 export const productSuppliersAPI = {
-  getAll: (): Promise<AxiosResponse<ApiResponse<ProductSupplier> | ProductSupplier[]>> =>
-    api.get('/product-suppliers/'),
-  
-  create: (data: CreateProductSupplierData): Promise<AxiosResponse<ProductSupplier>> =>
-    api.post('/product-suppliers/', data),
-  
-  delete: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/product-suppliers/${id}/`),
+  getAll: (): Promise<AxiosResponse<ProductSupplier[]>> => api.get('/product-suppliers/'),
+  create: (data: any) => api.post('/product-suppliers/', data),
+  delete: (productId: number, supplierId: number) =>
+    api.delete(`/product-suppliers/?product=${productId}&supplier=${supplierId}`),
 };
 
 export default api;
