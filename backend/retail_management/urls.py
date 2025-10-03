@@ -26,9 +26,18 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+
+    # JWT auth endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+    # 👇 Extra mapping so frontend's /api/auth/login/ works
+    path('api/auth/login/', TokenObtainPairView.as_view(), name='api_auth_login'),
+
+    # Include core app routes
     path('api/', include('core.urls')),
+
+    # API docs
     path('api/docs/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('api/redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]

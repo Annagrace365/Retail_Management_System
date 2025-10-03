@@ -8,6 +8,28 @@ from .serializers import (
     CustomerSerializer, ProductSerializer, SupplierSerializer, 
     OrderSerializer, OrderCreateSerializer, PaymentSerializer, ProductSupplierSerializer
 )
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.contrib.auth.models import User
+from rest_framework import status
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    """
+    Returns the currently authenticated user.
+    """
+    user = request.user
+    return Response({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
+    }, status=status.HTTP_200_OK)
+
 
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()

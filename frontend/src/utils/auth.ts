@@ -1,14 +1,20 @@
+// src/utils/auth.ts
 import { User } from '../types';
 
-export const setToken = (token: string): void => {
-  localStorage.setItem('token', token);
+export const setToken = (access: string, refresh: string) => {
+  localStorage.setItem('token', access);
+  localStorage.setItem('refreshToken', refresh);
 };
 
-export const getToken = (): string | null => {
-  return localStorage.getItem('token');
+export const getToken = () => localStorage.getItem('token');
+
+export const logout = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
 };
 
-export const setUser = (user: User): void => {
+export const setUser = (user: User) => {
   localStorage.setItem('user', JSON.stringify(user));
 };
 
@@ -17,27 +23,12 @@ export const getUser = (): User | null => {
   return user ? JSON.parse(user) : null;
 };
 
-export const isAuthenticated = (): boolean => {
-  return !!getToken();
-};
-
-export const logout = (): void => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-};
-
-export const hasRole = (role: 'admin' | 'staff' | 'inventory_manager'): boolean => {
+export const hasRole = (role: string) => {
   const user = getUser();
-  if (!user) return false;
-  
-  switch (role) {
-    case 'admin':
-      return user.is_superuser;
-    case 'staff':
-      return user.is_staff || user.is_superuser;
-    case 'inventory_manager':
-      return user.is_staff || user.is_superuser;
-    default:
-      return false;
-  }
+  return user?.roles?.includes(role);
+};
+// src/utils/auth.ts
+export const isAuthenticated = (): boolean => {
+  const token = localStorage.getItem('token');
+  return !!token; // true if token exists
 };
